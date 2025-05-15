@@ -16,13 +16,12 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import LinearSVC
-# import seaborn as sns
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.model_selection import GridSearchCV
 import joblib
 from imblearn.over_sampling import RandomOverSampler
-from sklearn.metrics import f1_score
-
+import numpy as np
 # Stopwords are common words that do not add much meaning to the text
 # and are often removed in text preprocessing.
 stop_words = set(stopwords.words('english'))
@@ -58,23 +57,54 @@ def cleaning(text):
     return " ".join(lemmatized)
 
 # Function to evaluate and visualize each model
+# Confusion matrix and feature importance
 def evaluate_model(name, model, X_train, X_test, y_train, y_test):
     print(f"\n=== {name} ===")
     model.fit(X_train, y_train)
     preds = model.predict(X_test)
-    
+
     print("\nClassification Report:\n")
     print(classification_report(y_test, preds, target_names=["negative", "neutral", "positive"]))
 
-    # Add macro and micro F1
-    print(f"Macro F1: {f1_score(y_test, preds, average='macro'):.4f}")
-    print(f"Micro F1: {f1_score(y_test, preds, average='micro'):.4f}")
+    cm = confusion_matrix(y_test, preds)
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['neg', 'neu', 'pos'], yticklabels=['neg', 'neu', 'pos'])
+    plt.title(f"Confusion Matrix: {name}")
+    plt.xlabel("Predicted")
+    plt.ylabel("Actual")
+    plt.show()
+
+    if hasattr(model, 'coef_'):
+        feature_names = np.array(tfidf.get_feature_names_out())
+        for i, class_label in enumerate(['negative', 'neutral', 'positive']):
+            top_pos_idx = np.argsort(model.coef_[i])[-10:][::-1]
+            print(f"\nTop words for {class_label}:")
+            print(feature_names[top_pos_idx])
 
 def predict_sentiment(tweet):
     cleaned = cleaning(tweet)
     vector = tfidf.transform([cleaned])
     prediction = best_model.predict(vector)[0]
     return ['negative', 'neutral', 'positive'][prediction]
+
+def eda(df):
+     # Exploratory Data Analysis (EDA)
+    print("Total tweets:", len(df))
+    print("Class distribution:")
+    print(df['airline_sentiment'].value_counts())
+
+    df['tweet_length'] = df['text'].apply(lambda x: len(x.split()))
+    print("\nAverage tweet length:", df['tweet_length'].mean())
+
+    print("\nExample tweets per sentiment:")
+    for label in ['negative', 'neutral', 'positive']:
+        example = df[df['airline_sentiment'] == label]['text'].iloc[0]
+        print(f"{label.capitalize()}: {example}\n")
+
+    sns.countplot(data=df, x='airline_sentiment', order=['negative', 'neutral', 'positive'])
+    plt.title("Sentiment Class Distribution")
+    plt.xlabel("Sentiment")
+    plt.ylabel("Tweet Count")
+    plt.show()
 
 if __name__ == "__main__":
     # Download the dataset from Kaggle
@@ -85,6 +115,8 @@ if __name__ == "__main__":
     # Drop unnecessary columns and rows with missing values
     df = df[["text", "airline_sentiment"]].dropna()
 
+    eda(df)
+
     # Data cleaning
     df["cleaning"] = df["text"].apply(cleaning)
     df['label'] = df['airline_sentiment'].map({'negative':0, 'neutral':1, 'positive':2})
@@ -93,7 +125,7 @@ if __name__ == "__main__":
     y = df['label']
     X_train, X_test, y_train, y_test = train_test_split(
             X, y, test_size=0.2, stratify=y, random_state=42)
-    print("Class proportions:\n", y_train.value_counts(normalize=True))  # verify class proportions
+    # print("Class proportions:\n", y_train.value_counts(normalize=True))  # verify class proportions
 
     # Vectorization
     tfidf = TfidfVectorizer(max_features=5000, ngram_range=(1,2), stop_words='english')
